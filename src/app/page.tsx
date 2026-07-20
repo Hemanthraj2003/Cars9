@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useInventory } from "@/hooks/useInventory";
 import { CarPart, Brand } from "@/data/mockData";
-import TechnicalDrawing from "@/components/TechnicalDrawing";
+
 import {
   Search,
   Edit2,
@@ -21,6 +21,82 @@ import {
   FileText,
 } from "lucide-react";
 
+const ImageWithLoader = ({ src, alt, id }: { src: string, alt: string, id: string }) => {
+  const [loading, setLoading] = React.useState(true);
+  return (
+    <div className="relative w-48 h-48 my-2 flex items-center justify-center">
+      {loading && <div className="absolute inset-0 flex items-center justify-center"><RefreshCw className="h-6 w-6 animate-spin text-neutral-300" /></div>}
+      <img key={id} src={src} alt={alt} onLoad={() => setLoading(false)} className={`w-full h-full object-contain relative z-10 transition-opacity duration-300 ${loading ? 'opacity-0' : 'opacity-100'}`} />
+    </div>
+  );
+};
+
+const SearchableSelect = ({ options, value, onChange, placeholder }: { options: string[], value: string, onChange: (v: string) => void, placeholder: string }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [search, setSearch] = React.useState(value);
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) setSearch(value);
+  }, [value, isOpen]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearch(value); // Revert to previous valid selection if closed without selecting
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [value]);
+
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div ref={wrapperRef} className="relative w-full">
+      <div className="relative">
+        <input
+          type="text"
+          value={isOpen ? search : value}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            setIsOpen(true);
+            setSearch(""); // Clear search to show all options
+          }}
+          placeholder={placeholder}
+          className="w-full px-2 py-1.5 border border-neutral-300 text-neutral-800 focus:outline-none focus:border-green-600 font-sans"
+        />
+        <ChevronDown className="absolute right-2 top-2 h-4 w-4 text-neutral-400 pointer-events-none" />
+      </div>
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-neutral-300 shadow-lg max-h-40 overflow-y-auto">
+          {filtered.length > 0 ? (
+            filtered.map((opt) => (
+              <div
+                key={opt}
+                className="px-2 py-1.5 hover:bg-green-50 cursor-pointer text-sm text-neutral-800"
+                onClick={() => {
+                  onChange(opt);
+                  setSearch(opt);
+                  setIsOpen(false);
+                }}
+              >
+                {opt}
+              </div>
+            ))
+          ) : (
+            <div className="px-2 py-1.5 text-neutral-500 text-[10px] italic bg-neutral-50">No matches (Must select from list)</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Home() {
   const {
     parts,
@@ -36,6 +112,33 @@ export default function Home() {
     adjustStock,
   } = useInventory();
 
+  // Table slide animation on load for mobile discovery
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  const [hasAnimated, setHasAnimated] = useState(false);
+  const [sidebarPeekOffset, setSidebarPeekOffset] = useState("-100%");
+
+  useEffect(() => {
+    if (isLoaded && !hasAnimated && tableContainerRef.current) {
+      const container = tableContainerRef.current;
+      // If container is horizontally scrollable (e.g. on mobile)
+      if (container.scrollWidth > container.clientWidth) {
+        setHasAnimated(true);
+        
+        // Peek the sidebar
+        setTimeout(() => setSidebarPeekOffset("-30%"), 200);
+        setTimeout(() => setSidebarPeekOffset("-100%"), 1000);
+
+        // Peek the table
+        setTimeout(() => {
+          container.scrollTo({ left: 120, behavior: "smooth" });
+          setTimeout(() => {
+            container.scrollTo({ left: 0, behavior: "smooth" });
+          }, 600);
+        }, 800);
+      }
+    }
+  }, [isLoaded, hasAnimated]);
+
   // Mode & UI State
   const [isAdmin, setIsAdmin] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,6 +151,7 @@ export default function Home() {
   // Mobile View Toggles
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showMobileDetails, setShowMobileDetails] = useState(false);
+  const [showDesktopSidebar, setShowDesktopSidebar] = useState(true);
 
   // Collapsible brand folders in sidebar
   const [expandedBrands, setExpandedBrands] = useState<Record<string, boolean>>({
@@ -58,6 +162,7 @@ export default function Home() {
   });
 
   const [downloadAlert, setDownloadAlert] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // Forms / Modals State
   const [showPartModal, setShowPartModal] = useState(false);
@@ -87,15 +192,6 @@ export default function Home() {
 
   const toggleBrandExpand = (brandId: string) => {
     setExpandedBrands((prev) => ({ ...prev, [brandId]: !prev[brandId] }));
-  };
-
-  // Reset database state back to defaults
-  const handleResetData = () => {
-    if (confirm("Are you sure you want to reset the database to default settings?")) {
-      localStorage.removeItem("carparts_inventory_parts");
-      localStorage.removeItem("carparts_inventory_brands");
-      window.location.reload();
-    }
   };
 
   // Filter and search logic
@@ -129,12 +225,12 @@ export default function Home() {
 
       // Price filter
       let matchesPrice = true;
-      if (priceFilter === "under50") {
-        matchesPrice = part.price < 50;
-      } else if (priceFilter === "50to100") {
-        matchesPrice = part.price >= 50 && part.price <= 100;
-      } else if (priceFilter === "over100") {
-        matchesPrice = part.price > 100;
+      if (priceFilter === "under5000") {
+        matchesPrice = part.price < 5000;
+      } else if (priceFilter === "5000to10000") {
+        matchesPrice = part.price >= 5000 && part.price <= 10000;
+      } else if (priceFilter === "over10000") {
+        matchesPrice = part.price > 10000;
       }
 
       return matchesSearch && matchesBrand && matchesSubbrand && matchesStock && matchesPrice;
@@ -178,13 +274,10 @@ export default function Home() {
       });
     } else {
       setEditingPart(null);
-      // Select first brand/subbrand as default if available
-      const defaultBrand = brands[0]?.name || "";
-      const defaultSubbrand = brands[0]?.subbrands[0] || "";
       setPartForm({
         name: "",
-        brand: defaultBrand,
-        subbrand: defaultSubbrand,
+        brand: "",
+        subbrand: "",
         sku: "",
         description: "",
         price: 0,
@@ -198,10 +291,11 @@ export default function Home() {
         fitmentType: "Direct Fit",
       });
     }
+    setImageFile(null);
     setShowPartModal(true);
   };
 
-  const handlePartFormSubmit = (e: React.FormEvent) => {
+  const handlePartFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!partForm.name || !partForm.brand || !partForm.subbrand || !partForm.sku) {
       alert("Name, Brand, Subbrand, and SKU are required!");
@@ -225,12 +319,27 @@ export default function Home() {
         threadSize: partForm.threadSize || undefined,
         fitmentType: partForm.fitmentType || undefined,
       },
+      imageUrl: editingPart?.imageUrl || undefined,
     };
 
+    if (imageFile) {
+      const formData = new FormData();
+      formData.append('image', imageFile);
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.file_id) {
+          partData.imageUrl = `/api/images/${data.file_id}`;
+        }
+      } catch (err) {
+        console.error("Failed to upload image", err);
+      }
+    }
+
     if (editingPart) {
-      updatePart(editingPart.id, partData);
+      await updatePart(editingPart.id, partData);
     } else {
-      const added = addPart(partData);
+      const added = await addPart(partData);
       setSelectedPartId(added.id);
     }
 
@@ -307,15 +416,24 @@ export default function Home() {
       <div>
         <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-neutral-200 font-mono font-bold uppercase tracking-wider text-neutral-500 text-[10px]">
           <span>Categories / Brands</span>
-          {isAdmin && (
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button
+                onClick={() => setShowBrandInput(!showBrandInput)}
+                title="Add Brand"
+                className="text-green-700 hover:text-green-900"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
-              onClick={() => setShowBrandInput(!showBrandInput)}
-              title="Add Brand"
-              className="text-green-700 hover:text-green-900"
+              onClick={() => setShowDesktopSidebar(false)}
+              title="Collapse Sidebar"
+              className="text-neutral-400 hover:text-neutral-600 hidden md:block"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <X className="h-3.5 w-3.5" />
             </button>
-          )}
+          </div>
         </div>
 
         {/* Add Brand input inline */}
@@ -558,15 +676,19 @@ export default function Home() {
           )}
         </div>
 
-        {/* Technical Drawing */}
+        {/* Product Image */}
         <div className="border border-neutral-300 bg-white p-3 flex flex-col items-center justify-center relative rounded shadow-sm">
-          <span className="absolute top-1 left-1.5 text-[8px] font-mono text-neutral-400 uppercase tracking-widest font-bold">
-            CAD SCHEMATIC
+          <span className="absolute top-1 left-1.5 text-[8px] font-mono text-neutral-400 uppercase tracking-widest font-bold z-10">
+            PRODUCT IMAGE
           </span>
-          <TechnicalDrawing partName={selectedPart.name} className="w-40 h-40" />
+          {selectedPart.imageUrl ? (
+            <ImageWithLoader id={selectedPart.id} src={selectedPart.imageUrl} alt={selectedPart.name} />
+          ) : (
+            <div className="w-48 h-48 bg-neutral-50 flex items-center justify-center text-neutral-300 font-mono text-[10px] my-2">NO IMAGE</div>
+          )}
           <div className="w-full border-t border-neutral-200 mt-2 pt-2 flex items-center justify-between font-mono text-[10px] text-neutral-500">
-            <span>SCALE: NOT TO SCALE</span>
-            <span>UNITS: MM / INCH</span>
+            <span>VERIFIED FIT</span>
+            <span>HIGH RES</span>
           </div>
         </div>
 
@@ -643,38 +765,13 @@ export default function Home() {
               </tr>
               <tr className="border-b border-neutral-200 hover:bg-neutral-100">
                 <td className="py-1 text-neutral-500 font-bold uppercase">Unit Price</td>
-                <td className="py-1 text-neutral-800 font-bold">${selectedPart.price.toFixed(2)}</td>
+                <td className="py-1 text-neutral-800 font-bold">₹{selectedPart.price.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        {/* Simulated CAD Download Box */}
-        <div className="border border-neutral-200 bg-white p-3 rounded space-y-2">
-          <div className="font-bold font-mono text-[10px] text-neutral-600 flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5 text-blue-700" />
-            <span>CAD FILES & DATA SHEET</span>
-          </div>
-          <div className="text-[10px] text-neutral-500 leading-normal">
-            Download technical specs and drawing sheets directly for your CAD program.
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              onClick={() => handleCadDownload(selectedPart, "DXF")}
-              className="border border-neutral-300 hover:bg-neutral-100 py-1 font-mono text-[10px] font-bold text-neutral-700 flex items-center justify-center gap-1 transition-colors"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>2D DXF</span>
-            </button>
-            <button
-              onClick={() => handleCadDownload(selectedPart, "STEP")}
-              className="border border-neutral-300 hover:bg-neutral-100 py-1 font-mono text-[10px] font-bold text-neutral-700 flex items-center justify-center gap-1 transition-colors"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>3D STEP</span>
-            </button>
-          </div>
-        </div>
+
       </div>
     );
   };
@@ -683,7 +780,7 @@ export default function Home() {
     <div className="flex h-screen flex-col bg-white text-neutral-800 font-sans text-xs">
       
       {/* 1. TOP DENSE BANNER */}
-      <div className="bg-[#005a2b] text-[#ffd600] px-4 py-1.5 flex justify-between items-center border-b border-neutral-300 font-mono text-[11px] font-bold tracking-wide">
+      <div className="bg-[#005a2b] text-[#ffd600] px-4 py-3 flex justify-between items-center border-b border-neutral-300 font-mono text-[11px] font-bold tracking-wide">
         <div className="flex items-center gap-2">
           {/* Mobile hamburger menu toggle */}
           <button
@@ -692,8 +789,7 @@ export default function Home() {
           >
             <Menu className="h-4 w-4" />
           </button>
-          <span className="text-white text-xs font-serif font-black tracking-normal">McMASTER-CARR.</span>
-          <span className="text-[10px] text-neutral-200 font-normal hidden sm:inline">SIMULATED CAR PARTS PORTAL</span>
+          <span className="text-white text-xs font-serif font-black tracking-normal">CarParts.</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-black/25 px-2 py-0.5 rounded text-white font-normal">
@@ -707,14 +803,6 @@ export default function Home() {
               {isAdmin ? "ADMIN CONSOLE" : "USER (BROWSE)"}
             </button>
           </div>
-          <button
-            onClick={handleResetData}
-            title="Restore default mock dataset"
-            className="flex items-center gap-1 hover:text-white text-neutral-200 transition-colors py-0.5 font-normal"
-          >
-            <RefreshCw className="h-3 w-3" />
-            <span className="hidden sm:inline">Reset DB</span>
-          </button>
         </div>
       </div>
 
@@ -745,7 +833,7 @@ export default function Home() {
             </button>
           </div>
           {/* Quick links below search */}
-          <div className="flex gap-3 mt-1.5 text-neutral-500 font-mono text-[10px] items-center overflow-x-auto whitespace-nowrap">
+          <div className="flex gap-3 mt-1.5 py-2 text-neutral-500 font-mono text-[10px] items-center overflow-x-auto whitespace-nowrap">
             <span className="font-bold">QUICK SEARCH:</span>
             {["Brake Pad", "Spark Plug", "Oil Filter", "Alternator", "Strut"].map((term) => (
               <button
@@ -778,9 +866,9 @@ export default function Home() {
               className="bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-[11px] focus:outline-none focus:border-green-600 font-mono"
             >
               <option value="all">All Prices</option>
-              <option value="under50">Under $50</option>
-              <option value="50to100">$50 to $100</option>
-              <option value="over100">Over $100</option>
+              <option value="under5000">Under ₹5000</option>
+              <option value="5000to10000">₹5000 to ₹10000</option>
+              <option value="over10000">Over ₹10000</option>
             </select>
           </div>
         </div>
@@ -820,9 +908,40 @@ export default function Home() {
           </div>
         )}
 
+        {/* MOBILE SIDEBAR PEEK ANIMATION */}
+        {!showMobileSidebar && (
+          <div 
+            className="fixed inset-y-0 left-0 z-40 flex md:hidden pointer-events-none transition-transform duration-700 ease-in-out"
+            style={{ transform: `translateX(${sidebarPeekOffset})` }}
+          >
+            <div className="relative w-64 max-w-xs bg-white h-full shadow-2xl flex flex-col p-3 z-50">
+              <div className="flex justify-between items-center mb-3">
+                <span className="font-mono font-bold text-xs uppercase text-neutral-800">NAVIGATE BRANDS</span>
+                <button className="text-neutral-400">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden opacity-50">
+                <SidebarContent />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* DESKTOP SIDEBAR */}
-        <aside className="w-56 border-r border-neutral-200 overflow-y-auto bg-neutral-50/70 p-3 select-none hidden md:block">
-          <SidebarContent />
+        <aside className={`border-r border-neutral-200 bg-neutral-50/70 select-none hidden md:flex flex-col transition-all duration-300 ${showDesktopSidebar ? 'w-56 p-3 overflow-y-auto' : 'w-10 py-3 items-center'}`}>
+          {!showDesktopSidebar && (
+            <div className="flex justify-center w-full">
+              <button
+                onClick={() => setShowDesktopSidebar(true)}
+                className="text-neutral-500 hover:text-neutral-800"
+                title="Expand Sidebar"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          {showDesktopSidebar && <SidebarContent />}
         </aside>
 
         {/* MIDDLE CONTENT: TABLE & RESULTS */}
@@ -873,13 +992,18 @@ export default function Home() {
           )}
 
           {/* Tabular Parts Grid */}
-          <div className="flex-1 overflow-auto">
+          <div ref={tableContainerRef} className="flex-1 overflow-auto">
             {filteredParts.length === 0 ? (
               <div className="p-8 text-center text-neutral-500 font-mono">
                 NO PARTS MATCH THE CURRENT SEARCH OR FILTER CRITERIA.
               </div>
             ) : (
               <div className="min-w-full inline-block align-middle">
+                {/* Mobile scroll indicator */}
+                <div className="md:hidden flex items-center gap-2 px-3 py-1.5 bg-neutral-100 text-neutral-500 font-mono text-[10px] rounded mb-2 border border-neutral-200">
+                  <Info className="h-3 w-3" />
+                  <span>Swipe table left/right to view more columns</span>
+                </div>
                 <table className="min-w-full text-left border-collapse table-auto">
                   <thead>
                     <tr className="bg-neutral-100 border-b border-neutral-200 text-neutral-600 font-mono text-[10px] tracking-wider sticky top-0 uppercase">
@@ -968,7 +1092,7 @@ export default function Home() {
 
                           {/* Price */}
                           <td className="py-2 px-3 border-r border-neutral-200 text-right text-neutral-900 font-bold">
-                            ${part.price.toFixed(2)}
+                            ₹{part.price.toFixed(2)}
                           </td>
 
                           {/* Actions (Admin Only) */}
@@ -1057,6 +1181,20 @@ export default function Home() {
             <form onSubmit={handlePartFormSubmit} className="p-4 space-y-4 text-[11px] font-mono">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 
+                {/* Image Upload */}
+                <div className="sm:col-span-2">
+                  <label className="block text-neutral-500 font-bold mb-1">PRODUCT IMAGE (Optional)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                    className="w-full px-2 py-1.5 border border-neutral-300 text-neutral-800 focus:outline-none focus:border-green-600 bg-white"
+                  />
+                  {editingPart?.imageUrl && !imageFile && (
+                    <div className="mt-1 text-[10px] text-green-600">Current image is kept if no new image is uploaded.</div>
+                  )}
+                </div>
+
                 {/* Part Name */}
                 <div className="sm:col-span-2">
                   <label className="block text-neutral-500 font-bold mb-1">PRODUCT NAME *</label>
@@ -1073,36 +1211,23 @@ export default function Home() {
                 {/* Brand */}
                 <div>
                   <label className="block text-neutral-500 font-bold mb-1">BRAND *</label>
-                  <select
-                    value={partForm.brand}
-                    onChange={(e) => setPartForm({ ...partForm, brand: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-neutral-300 text-neutral-800 focus:outline-none focus:border-green-600"
-                  >
-                    {brands.map((b) => (
-                      <option key={b.id} value={b.name}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect 
+                    options={brands.map(b => b.name)} 
+                    value={partForm.brand} 
+                    onChange={(v) => setPartForm({ ...partForm, brand: v })} 
+                    placeholder="Search or type new brand..."
+                  />
                 </div>
 
                 {/* Subbrand */}
                 <div>
                   <label className="block text-neutral-500 font-bold mb-1">SUBBRAND (MODEL) *</label>
-                  <select
-                    value={partForm.subbrand}
-                    onChange={(e) => setPartForm({ ...partForm, subbrand: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-neutral-300 text-neutral-800 focus:outline-none focus:border-green-600"
-                  >
-                    {formSubbrands.map((sb) => (
-                      <option key={sb} value={sb}>
-                        {sb}
-                      </option>
-                    ))}
-                    {formSubbrands.length === 0 && (
-                      <option value="">-- No subbrands available --</option>
-                    )}
-                  </select>
+                  <SearchableSelect 
+                    options={formSubbrands} 
+                    value={partForm.subbrand} 
+                    onChange={(v) => setPartForm({ ...partForm, subbrand: v })} 
+                    placeholder="Search or type new model..."
+                  />
                 </div>
 
                 {/* SKU */}
@@ -1132,7 +1257,7 @@ export default function Home() {
 
                 {/* Price */}
                 <div>
-                  <label className="block text-neutral-500 font-bold mb-1">PRICE ($ USD) *</label>
+                  <label className="block text-neutral-500 font-bold mb-1">PRICE (₹ INR) *</label>
                   <input
                     type="number"
                     step="0.01"

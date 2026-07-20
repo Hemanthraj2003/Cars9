@@ -1,75 +1,53 @@
-import { useState, useEffect } from "react";
-import { CarPart, Brand, initialBrands, initialParts } from "../data/mockData";
+import useSWR from 'swr';
+import { CarPart, Brand } from '../data/mockData';
+
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to fetch');
+  return data;
+};
 
 export function useInventory() {
-  const [parts, setParts] = useState<CarPart[]>([]);
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedParts = localStorage.getItem("carparts_inventory_parts");
-      const storedBrands = localStorage.getItem("carparts_inventory_brands");
-
-      if (storedParts) {
-        setParts(JSON.parse(storedParts));
-      } else {
-        setParts(initialParts);
-        localStorage.setItem("carparts_inventory_parts", JSON.stringify(initialParts));
-      }
-
-      if (storedBrands) {
-        setBrands(JSON.parse(storedBrands));
-      } else {
-        setBrands(initialBrands);
-        localStorage.setItem("carparts_inventory_brands", JSON.stringify(initialBrands));
-      }
-      setIsLoaded(true);
-    }
-  }, []);
-
-  // Sync state changes with localStorage
-  const saveParts = (newParts: CarPart[]) => {
-    setParts(newParts);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("carparts_inventory_parts", JSON.stringify(newParts));
-    }
-  };
-
-  const saveBrands = (newBrands: Brand[]) => {
-    setBrands(newBrands);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("carparts_inventory_brands", JSON.stringify(newBrands));
-    }
-  };
+  const { data: parts = [], mutate: mutateParts } = useSWR<CarPart[]>('/api/parts', fetcher);
+  const { data: brands = [], mutate: mutateBrands } = useSWR<Brand[]>('/api/brands', fetcher);
+  
+  const isLoaded = parts.length > 0 || brands.length > 0;
 
   // Add a brand
-  const addBrand = (name: string) => {
+  const addBrand = async (name: string) => {
     const id = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
     if (brands.some((b) => b.id === id || b.name.toLowerCase() === name.toLowerCase())) {
       alert("Brand already exists!");
       return;
     }
-    const newBrands = [...brands, { id, name, subbrands: [] }];
-    saveBrands(newBrands);
+
+    const newBrand = { id, name, subbrands: [] };
+    
+    // Optimistic update
+    mutateBrands([...brands, newBrand], false);
+
+    await fetch('/api/brands', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'brand', name })
+    });
+    
+    mutateBrands();
   };
 
   // Delete a brand
-  const deleteBrand = (id: string) => {
-    const brandToDelete = brands.find((b) => b.id === id);
-    if (!brandToDelete) return;
+  const deleteBrand = async (id: string) => {
+    // Optimistic update
+    mutateBrands(brands.filter(b => b.id !== id), false);
     
-    // Also delete all parts belonging to this brand
-    const newParts = parts.filter((p) => p.brand.toLowerCase() !== brandToDelete.name.toLowerCase());
-    const newBrands = brands.filter((b) => b.id !== id);
+    await fetch(`/api/brands/${id}`, { method: 'DELETE' });
     
-    saveParts(newParts);
-    saveBrands(newBrands);
+    mutateBrands();
   };
 
-  // Add a subbrand to a brand
-  const addSubbrand = (brandId: string, subbrandName: string) => {
+  // Add a subbrand
+  const addSubbrand = async (brandId: string, subbrandName: string) => {
     const targetBrand = brands.find((b) => b.id === brandId);
     if (!targetBrand) return;
 
@@ -78,75 +56,62 @@ export function useInventory() {
       return;
     }
 
-    const newBrands = brands.map((b) => {
-      if (b.id === brandId) {
-        return {
-          ...b,
-          subbrands: [...b.subbrands, subbrandName],
-        };
-      }
-      return b;
+    // Optimistic update
+    const newBrands = brands.map((b) => 
+      b.id === brandId ? { ...b, subbrands: [...b.subbrands, subbrandName] } : b
+    );
+    mutateBrands(newBrands, false);
+
+    await fetch('/api/brands', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'subbrand', brandId, name: subbrandName })
     });
-    saveBrands(newBrands);
+
+    mutateBrands();
   };
 
   // Delete a subbrand
-  const deleteSubbrand = (brandId: string, subbrandName: string) => {
-    const targetBrand = brands.find((b) => b.id === brandId);
-    if (!targetBrand) return;
-
-    // Filter out parts of this subbrand under this brand
-    const newParts = parts.filter(
-      (p) =>
-        !(p.brand.toLowerCase() === targetBrand.name.toLowerCase() &&
-          p.subbrand.toLowerCase() === subbrandName.toLowerCase())
+  const deleteSubbrand = async (brandId: string, subbrandName: string) => {
+    // Optimistic update
+    const newBrands = brands.map((b) => 
+      b.id === brandId ? { ...b, subbrands: b.subbrands.filter(s => s !== subbrandName) } : b
     );
+    mutateBrands(newBrands, false);
 
-    const newBrands = brands.map((b) => {
-      if (b.id === brandId) {
-        return {
-          ...b,
-          subbrands: b.subbrands.filter((s) => s.toLowerCase() !== subbrandName.toLowerCase()),
-        };
-      }
-      return b;
-    });
+    // Assuming we create an endpoint to delete a subbrand
+    await fetch(`/api/brands/${brandId}/subbrands/${encodeURIComponent(subbrandName)}`, { method: 'DELETE' });
 
-    saveParts(newParts);
-    saveBrands(newBrands);
+    mutateBrands();
   };
 
-  // Add a part
-  const addPart = (part: Omit<CarPart, "id">) => {
-    // Generate an ID similar to McMaster (e.g. 9601K21)
-    const maxNum = parts.reduce((max, p) => {
-      const match = p.id.match(/9601K(\d+)/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        return num > max ? num : max;
-      }
-      return max;
-    }, 20);
-    
-    const newId = `9601K${maxNum + 1}`;
-    const newPart: CarPart = {
-      ...part,
-      id: newId,
-    };
+  // Add a part (can also include FormData for image)
+  const addPart = async (part: any) => {
+    // Optimistic update - generate fake ID for instant UI
+    const tempId = `temp-${Date.now()}`;
+    const newPart = { ...part, id: tempId };
+    mutateParts([newPart, ...parts], false);
 
-    const newParts = [newPart, ...parts];
-    saveParts(newParts);
+    // If it's a FormData object (meaning it has an image), we hit a different endpoint or handle it in the component
+    // Assuming 'part' is just the data object for now. Image uploads are usually handled before calling addPart.
+    await fetch('/api/parts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(part)
+    });
+
+    mutateParts();
     return newPart;
   };
 
   // Update a part
-  const updatePart = (id: string, updatedFields: Partial<CarPart>) => {
+  const updatePart = async (id: string, updatedFields: Partial<CarPart>) => {
+    // Optimistic update
     const newParts = parts.map((p) => {
       if (p.id === id) {
         return {
           ...p,
           ...updatedFields,
-          // Ensure nested specs merge correctly if provided
           specifications: {
             ...p.specifications,
             ...(updatedFields.specifications || {}),
@@ -155,25 +120,45 @@ export function useInventory() {
       }
       return p;
     });
-    saveParts(newParts);
+    mutateParts(newParts, false);
+
+    await fetch(`/api/parts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedFields)
+    });
+
+    mutateParts();
   };
 
   // Delete a part
-  const deletePart = (id: string) => {
-    const newParts = parts.filter((p) => p.id !== id);
-    saveParts(newParts);
+  const deletePart = async (id: string) => {
+    // Optimistic update
+    mutateParts(parts.filter(p => p.id !== id), false);
+
+    await fetch(`/api/parts/${id}`, { method: 'DELETE' });
+
+    mutateParts();
   };
 
   // Quick adjust stock
-  const adjustStock = (id: string, amount: number) => {
-    const newParts = parts.map((p) => {
-      if (p.id === id) {
-        const newStock = Math.max(0, p.stock + amount);
-        return { ...p, stock: newStock };
-      }
-      return p;
+  const adjustStock = async (id: string, amount: number) => {
+    const part = parts.find(p => p.id === id);
+    if (!part) return;
+
+    const newStock = Math.max(0, part.stock + amount);
+
+    // Optimistic update
+    const newParts = parts.map((p) => (p.id === id ? { ...p, stock: newStock } : p));
+    mutateParts(newParts, false);
+
+    await fetch(`/api/parts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stock: newStock })
     });
-    saveParts(newParts);
+
+    mutateParts();
   };
 
   return {

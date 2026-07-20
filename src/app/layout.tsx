@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "McMaster-Carr style Car Parts Inventory Portal",
-  description: "High-performance, information-dense, simulated car parts inventory and CAD catalog.",
+  title: "CarParts",
+  description: "car parts inventory",
 };
 
 export default function RootLayout({

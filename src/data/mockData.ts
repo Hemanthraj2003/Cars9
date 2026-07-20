@@ -8,6 +8,7 @@ export interface CarPart {
   price: number;
   stock: number;
   location: string;
+  imageUrl?: string;
   specifications: {
     material?: string;
     dimensions?: string;
@@ -17,7 +18,6 @@ export interface CarPart {
     fitmentType?: string;
     operatingTemp?: string;
   };
-  imageUrl?: string;
 }
 
 export interface Brand {
@@ -57,8 +57,9 @@ export const initialParts: CarPart[] = [
     subbrand: "Camry",
     sku: "BP-TY-CAM-01",
     description: "Low-dust, quiet ceramic compound brake pads. Features chamfered slots and shims to eliminate vibrations and brake squeal under high temperatures.",
-    price: 48.50,
+    price: 4050.00,
     stock: 24,
+    imageUrl: "/images/brake_pads.png",
     location: "Aisle 04, Shelf B3",
     specifications: {
       material: "Ceramic / Copper-Free",
@@ -75,8 +76,9 @@ export const initialParts: CarPart[] = [
     subbrand: "Prius",
     sku: "SP-TY-PRI-02",
     description: "Premium iridium center electrode with platinum ground electrode for long-lasting spark and clean fuel combustion. High corrosion resistance.",
-    price: 36.20,
+    price: 3000.00,
     stock: 45,
+    imageUrl: "/images/spark_plug.png",
     location: "Aisle 02, Shelf A1",
     specifications: {
       material: "Iridium / Platinum",
@@ -94,8 +96,9 @@ export const initialParts: CarPart[] = [
     subbrand: "Civic",
     sku: "OF-HD-CIV-03",
     description: "Synthetic blend media designed to trap dirt particles as small as 20 microns. Heavy-duty steel canister housing with silicone anti-drainback valve.",
-    price: 8.95,
+    price: 750.00,
     stock: 120,
+    imageUrl: "/images/oil_filter.png",
     location: "Aisle 01, Shelf C2",
     specifications: {
       material: "Synthetic Fiber / Steel",
@@ -113,8 +116,9 @@ export const initialParts: CarPart[] = [
     subbrand: "F-150",
     sku: "AL-FD-F15-04",
     description: "Heavy-duty alternator manufactured with premium bearings and rectifiers. Rigorously tested to withstand extreme heat and vibration.",
-    price: 185.00,
+    price: 15400.00,
     stock: 5,
+    imageUrl: "/images/alternator.png",
     location: "Aisle 08, Shelf D1",
     specifications: {
       material: "Cast Aluminum Housing / Copper Windings",
@@ -132,8 +136,9 @@ export const initialParts: CarPart[] = [
     subbrand: "3-Series",
     sku: "RH-BM-3SE-05",
     description: "Heat and ozone resistant EPDM rubber construction. Pre-shaped for an exact engine bay clearance without kinking or rubbing.",
-    price: 24.15,
+    price: 2000.00,
     stock: 15,
+    imageUrl: "/images/radiator_hose.png",
     location: "Aisle 05, Shelf A4",
     specifications: {
       material: "EPDM Rubber",
@@ -150,8 +155,9 @@ export const initialParts: CarPart[] = [
     subbrand: "Accord",
     sku: "OS-HD-ACC-06",
     description: "Dual protective layer of alumina coating keeps target gas element clean. Laser welded body ensures maximum strength and protection against water ingress.",
-    price: 64.00,
+    price: 5300.00,
     stock: 18,
+    imageUrl: "/images/oxygen_sensor.png",
     location: "Aisle 03, Shelf B2",
     specifications: {
       material: "Stainless Steel / Zirconia Ceramic",
@@ -169,8 +175,9 @@ export const initialParts: CarPart[] = [
     subbrand: "X5",
     sku: "SA-BM-X50-07",
     description: "Twin-tube gas pressure strut designed to restore original ride handling and control. Finished in anti-corrosive gloss black paint.",
-    price: 112.50,
+    price: 9350.00,
     stock: 8,
+    imageUrl: "/images/shock_absorber.png",
     location: "Aisle 09, Shelf B1",
     specifications: {
       material: "Alloy Steel",
@@ -187,8 +194,9 @@ export const initialParts: CarPart[] = [
     subbrand: "Explorer",
     sku: "CF-FD-EXP-08",
     description: "Multi-layer filter medium captures dust, pollen, soot, and active gases. Activated carbon layer neutralizes exhaust fumes and cabin odors.",
-    price: 15.75,
+    price: 1300.00,
     stock: 60,
+    imageUrl: "/images/cabin_air_filter.png",
     location: "Aisle 01, Shelf A3",
     specifications: {
       material: "Activated Carbon Non-Woven Fabric",
@@ -205,8 +213,9 @@ export const initialParts: CarPart[] = [
     subbrand: "Tacoma",
     sku: "FI-TY-TAC-09",
     description: "Twelve-hole design with advanced fuel atomization. Internal seal ring protects coil against moisture and chemicals.",
-    price: 78.00,
+    price: 6500.00,
     stock: 12,
+    imageUrl: "/images/fuel_injector.png",
     location: "Aisle 07, Shelf C1",
     specifications: {
       material: "Stainless Steel / Composite",
@@ -223,8 +232,9 @@ export const initialParts: CarPart[] = [
     subbrand: "CR-V",
     sku: "WB-HD-CRV-10",
     description: "Premium rubber blade with graphite coating for streak-free wiping. Aerodynamic spoiler prevents blade lift at high wind speeds.",
-    price: 19.99,
+    price: 1650.00,
     stock: 90,
+    imageUrl: "/images/wiper_blade.png",
     location: "Aisle 01, Shelf E1",
     specifications: {
       material: "Natural Rubber / Steel Frame",
