@@ -22,7 +22,7 @@ export function useInventory() {
       return;
     }
 
-    const newBrand = { id, name, subbrands: [] };
+    const newBrand: Brand = { id, name, subbrands: [] };
     
     // Optimistic update
     mutateBrands([...brands, newBrand], false);
@@ -51,23 +51,25 @@ export function useInventory() {
     const targetBrand = brands.find((b) => b.id === brandId);
     if (!targetBrand) return;
 
-    if (targetBrand.subbrands.some((s) => s.toLowerCase() === subbrandName.toLowerCase())) {
+    if (targetBrand.subbrands.some((s) => s.name.toLowerCase() === subbrandName.toLowerCase())) {
       alert("Subbrand already exists!");
       return;
     }
 
+    const newSubObj = { name: subbrandName, years: ["2024", "2023", "2022", "2021", "2020"] };
+
     // Optimistic update
     const newBrands = brands.map((b) => 
-      b.id === brandId ? { ...b, subbrands: [...b.subbrands, subbrandName] } : b
+      b.id === brandId ? { ...b, subbrands: [...b.subbrands, newSubObj] } : b
     );
     mutateBrands(newBrands, false);
 
     await fetch('/api/brands', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'subbrand', brandId, name: subbrandName })
+      body: JSON.stringify({ type: 'subbrand', brandId, name: subbrandName, years: newSubObj.years })
     });
-
+    
     mutateBrands();
   };
 
@@ -75,25 +77,21 @@ export function useInventory() {
   const deleteSubbrand = async (brandId: string, subbrandName: string) => {
     // Optimistic update
     const newBrands = brands.map((b) => 
-      b.id === brandId ? { ...b, subbrands: b.subbrands.filter(s => s !== subbrandName) } : b
+      b.id === brandId ? { ...b, subbrands: b.subbrands.filter(s => s.name !== subbrandName) } : b
     );
     mutateBrands(newBrands, false);
 
-    // Assuming we create an endpoint to delete a subbrand
     await fetch(`/api/brands/${brandId}/subbrands/${encodeURIComponent(subbrandName)}`, { method: 'DELETE' });
 
     mutateBrands();
   };
 
-  // Add a part (can also include FormData for image)
+  // Add a part
   const addPart = async (part: any) => {
-    // Optimistic update - generate fake ID for instant UI
     const tempId = `temp-${Date.now()}`;
     const newPart = { ...part, id: tempId };
     mutateParts([newPart, ...parts], false);
 
-    // If it's a FormData object (meaning it has an image), we hit a different endpoint or handle it in the component
-    // Assuming 'part' is just the data object for now. Image uploads are usually handled before calling addPart.
     await fetch('/api/parts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -106,7 +104,6 @@ export function useInventory() {
 
   // Update a part
   const updatePart = async (id: string, updatedFields: Partial<CarPart>) => {
-    // Optimistic update
     const newParts = parts.map((p) => {
       if (p.id === id) {
         return {
@@ -133,7 +130,6 @@ export function useInventory() {
 
   // Delete a part
   const deletePart = async (id: string) => {
-    // Optimistic update
     mutateParts(parts.filter(p => p.id !== id), false);
 
     await fetch(`/api/parts/${id}`, { method: 'DELETE' });
@@ -148,7 +144,6 @@ export function useInventory() {
 
     const newStock = Math.max(0, part.stock + amount);
 
-    // Optimistic update
     const newParts = parts.map((p) => (p.id === id ? { ...p, stock: newStock } : p));
     mutateParts(newParts, false);
 
